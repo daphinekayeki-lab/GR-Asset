@@ -189,7 +189,7 @@ new Chart(document.getElementById('projectChart'), {
   data: {
     labels: projectData.labels,
     datasets: [{
-      label: 'Total Value (UGX)',
+      label: 'Total Value (USD)',
       data: projectData.values,
       backgroundColor: projectData.labels.map((_,i) => COLORS[i % COLORS.length]),
       borderRadius: 4,
@@ -204,7 +204,7 @@ new Chart(document.getElementById('projectChart'), {
       legend: { display: false },
       tooltip: {
         callbacks: {
-          label: ctx => ` UGX ${ctx.raw.toLocaleString()} (${projectData.counts[ctx.dataIndex]} assets)`
+          label: ctx => ` USD ${ctx.raw.toLocaleString()} (${projectData.counts[ctx.dataIndex]} assets)`
         }
       }
     },

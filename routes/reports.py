@@ -8,10 +8,16 @@ from datetime import datetime
 import csv
 import io
 
-from reportlab.lib.pagesizes import letter
-from reportlab.lib import colors
+from pdf_utils import (
+    build_gr_pdf,
+    build_pdf_table,
+    asset_register_col_widths,
+    return_log_col_widths,
+    pdf_response,
+    PRIMARY,
+)
 from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.platypus import Paragraph, Spacer
 
 reports_bp = Blueprint('reports', __name__)
 
@@ -138,47 +144,21 @@ def download_csv():
 def download_pdf():
     assets = Asset.query.filter_by(status='active').order_by(Asset.asset_number).all()
     returns = ReturnRecord.query.order_by(ReturnRecord.returned_at.desc()).all()
-
-    buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter,
-                            rightMargin=30, leftMargin=30,
-                            topMargin=30, bottomMargin=18)
     styles = getSampleStyleSheet()
-    elements = []
 
-    title = Paragraph('GR Asset Management System - Asset Report', styles['Title'])
-    elements.append(title)
-    elements.append(Spacer(1, 12))
+    def body(doc):
+        items = [
+            build_pdf_table(_build_asset_rows(assets), asset_register_col_widths(doc.width)),
+            Spacer(1, 18),
+        ]
+        if returns:
+            section_style = styles['Heading2'].clone('ReportSection')
+            section_style.textColor = PRIMARY
+            section_style.fontSize = 11
+            section_style.spaceAfter = 6
+            items.append(Paragraph('Return Log', section_style))
+            items.append(Spacer(1, 6))
+            items.append(build_pdf_table(_build_return_rows(returns), return_log_col_widths(doc.width)))
+        return items
 
-    asset_table = Table(_build_asset_rows(assets), repeatRows=1)
-    asset_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1a3a5c')),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-        ('GRID', (0, 0), (-1, -1), 0.25, colors.grey),
-        ('BACKGROUND', (0, 1), (-1, -1), colors.whitesmoke),
-    ]))
-    elements.append(asset_table)
-    elements.append(Spacer(1, 24))
-
-    if returns:
-        elements.append(Paragraph('Return Log', styles['Heading2']))
-        elements.append(Spacer(1, 12))
-        return_table = Table(_build_return_rows(returns), repeatRows=1)
-        return_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1a3a5c')),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-            ('GRID', (0, 0), (-1, -1), 0.25, colors.grey),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.whitesmoke),
-        ]))
-        elements.append(return_table)
-
-    doc.build(elements)
-    pdf = buffer.getvalue()
-    buffer.close()
-
-    response = make_response(pdf)
-    response.headers['Content-Type'] = 'application/pdf'
-    response.headers['Content-Disposition'] = 'attachment; filename=gr_asset_report.pdf'
-    return response
+    return pdf_response(build_gr_pdf(body), 'gr_asset_report.pdf')

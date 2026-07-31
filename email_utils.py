@@ -10,9 +10,9 @@ from email.mime.text import MIMEText
 from flask import current_app
 
 
-def send_welcome_email(to_email, to_name, username, password, role):
+def send_welcome_email(to_email, to_name, username, role):
     """
-    Send welcome email with login credentials to a newly registered user.
+    Send a notification email when a new user account is created.
     Returns (True, None) on success or (False, error_message) on failure.
     """
     cfg = current_app.config
@@ -46,15 +46,14 @@ def send_welcome_email(to_email, to_name, username, password, role):
     text_body = f"""
 Dear {to_name},
 
-Your account has been created on the {org_name} Asset Management System.
+An account has been created for you on the {org_name} Asset Management System.
 
 Login details:
   System URL : {app_url}
   Username   : {username}
-  Password   : {password}
   Role       : {role_label}
 
-Please log in and change your password as soon as possible.
+Please sign in using the credentials provided separately by your administrator, then change your password immediately.
 
 Regards,
 {org_name} Administration
@@ -90,7 +89,7 @@ body{{font-family:'Segoe UI',Arial,sans-serif;background:#f0f2f5;margin:0;paddin
       <table>
         <tr><td>System URL</td><td class="val"><a href="{app_url}" style="color:#1a3a5c">{app_url}</a></td></tr>
         <tr><td>Username</td><td class="val">{username}</td></tr>
-        <tr><td>Password</td><td class="val">{password}</td></tr>
+        <tr><td>Password</td><td class="val">Provided separately</td></tr>
         <tr><td>Role</td><td>{role_label}</td></tr>
       </table>
     </div>
@@ -142,6 +141,42 @@ body{{font-family:'Segoe UI',Arial,sans-serif;background:#f0f2f5;margin:0;paddin
         err = f"Unexpected error: {str(e)}"
         print(f"  [Email] ERROR: {traceback.format_exc()}")
         return False, err
+
+
+def send_admin_notification(subject, body):
+    """Notify system admin mailbox about a new user request."""
+    cfg = current_app.config
+    sender = cfg.get('MAIL_USERNAME', '')
+    if not sender:
+        return False, 'Email not configured'
+    admin_email = cfg.get('ADMIN_EMAIL', sender)
+    msg = MIMEMultipart('alternative')
+    msg['Subject'] = f"[GR AMS] {subject}"
+    msg['From'] = sender
+    msg['To'] = admin_email
+    html = f"""<html><body style="font-family:Arial,sans-serif">
+    <h2 style="color:#0d3d23">{subject}</h2>
+    <p>{body}</p>
+    <p style="color:#666;font-size:12px">GR Asset Management System</p>
+    </body></html>"""
+    msg.attach(MIMEText(body, 'plain'))
+    msg.attach(MIMEText(html, 'html'))
+    try:
+        smtp_server = cfg.get('MAIL_SERVER', 'smtp.office365.com')
+        smtp_port = int(cfg.get('MAIL_PORT', 587))
+        use_ssl = str(cfg.get('MAIL_USE_SSL', 'false')).lower() == 'true'
+        if use_ssl:
+            server = smtplib.SMTP_SSL(smtp_server, smtp_port)
+        else:
+            server = smtplib.SMTP(smtp_server, smtp_port)
+            server.starttls()
+        server.login(sender, cfg.get('MAIL_PASSWORD', ''))
+        server.sendmail(sender, [admin_email], msg.as_string())
+        server.quit()
+        return True, None
+    except Exception as e:
+        print(f"  [Email] Admin notify failed: {e}")
+        return False, str(e)
 
 
 def send_password_reset_email(to_email, to_name, username, password):

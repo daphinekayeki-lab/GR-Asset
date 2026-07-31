@@ -1,9 +1,9 @@
 {% extends 'base.html' %}
 {% block title %}Assign Assets — GR AMS{% endblock %}
-{% block page_title %}Assign Assets{% endblock %}
+{% block page_title %}Assign Assets to Users{% endblock %}
 {% block content %}
 <div class="page-title">
-  <div class="page-title-text"><h2>Assign Assets to Users</h2><p>Select a staff user to manage their asset assignments.</p></div>
+  <div class="page-title-text"><p>Select a staff user to manage their asset assignments.</p></div>
 </div>
 
 <div style="display:grid;grid-template-columns:260px 1fr;gap:20px;align-items:start">
@@ -46,7 +46,7 @@
             {% for a in my_assets %}
             <tr>
               <td><span class="asset-tag">{{ a.tag }}</span></td>
-              <td><strong>{{ a.name }}</strong><br><span class="text-muted text-sm">{{ a.category.name }}</span></td>
+              <td><strong>{{ a.name }}</strong><br><span class="text-muted text-sm">{{ a.category.name if a.category else '—' }}</span></td>
               <td><span class="badge badge-{{ a.condition }}">{{ a.condition|title }}</span></td>
               <td class="text-muted text-sm">{{ a.assigned_on|dateformat }}</td>
               <td>
@@ -78,8 +78,8 @@
             {% for a in available %}
             <tr>
               <td><span class="asset-tag">{{ a.tag }}</span></td>
-              <td><strong>{{ a.name }}</strong><br><span class="text-muted text-sm">{{ a.category.name }}</span></td>
-              <td>{{ a.project.name }}</td>
+              <td><strong>{{ a.name }}</strong><br><span class="text-muted text-sm">{{ a.category.name if a.category else '—' }}</span></td>
+              <td>{{ a.project.name if a.project else '—' }}</td>
               <td><span class="badge badge-{{ a.condition }}">{{ a.condition|title }}</span></td>
               <td class="font-mono text-sm">{{ a.price|currency }}</td>
               <td>

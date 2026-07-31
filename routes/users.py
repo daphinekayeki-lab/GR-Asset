@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, redirect, url_for, flash, request, abort, send_file
 from flask_login import login_required, current_user
-from models import User, Asset, Role
+from models import User, Asset, Role, Project
 from extensions import db
 from email_utils import send_welcome_email
 from functools import wraps
@@ -36,6 +36,10 @@ def _roles():
     return Role.query.order_by(Role.name).all()
 
 
+def _countries():
+    return Project.query.filter_by(status='active').order_by(Project.name).all()
+
+
 def admin_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
@@ -66,8 +70,8 @@ def import_template():
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = 'Users'
-    ws.append(['NAME', 'USERNAME', 'EMAIL', 'DEPARTMENT', 'ROLE'])
-    ws.append(['Jane Doe', 'janedoe', 'jane.doe@example.com', 'Finance', 'finance'])
+    ws.append(['NAME', 'USERNAME', 'EMAIL', 'DEPARTMENT', 'COUNTRY', 'ROLE'])
+    ws.append(['Jane Doe', 'janedoe', 'jane.doe@example.com', 'Finance', 'Uganda', 'finance'])
 
     buffer = io.BytesIO()
     wb.save(buffer)
@@ -118,6 +122,8 @@ def import_users():
 
     role_map = {r.name.lower(): r.name for r in Role.query.all()}
     role_label_map = {r.label.lower(): r.name for r in Role.query.all()}
+    proj_map = {p.name.lower(): p for p in Project.query.all()}
+    proj_code = {p.code.lower(): p for p in Project.query.all()}
 
     imported = 0
     skipped = 0
@@ -131,6 +137,7 @@ def import_users():
         username = col(row, 'username')
         email = col(row, 'email')
         department = col(row, 'department')
+        country_value = col(row, 'country')
         role_value = col(row, 'role')
 
         if not name or not username:
@@ -151,12 +158,20 @@ def import_users():
             if requested and role_key == 'user' and requested not in ('user', 'staff', 'staff user'):
                 errors.append(f'Row {i}: Role {role_value} not found; defaulted to user.')
 
+        project = None
+        if country_value:
+            requested_country = country_value.strip().lower()
+            project = proj_map.get(requested_country) or proj_code.get(requested_country)
+            if not project:
+                errors.append(f'Row {i}: Country {country_value} not found; left blank.')
+
         password = ''.join(secrets.choice('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789') for _ in range(10))
         user = User(
             username=username,
             name=name,
             email=email or None,
             department=department or None,
+            project_id=project.id if project else None,
             role=role_key,
             status='active'
         )
@@ -191,13 +206,15 @@ def new():
 
         if User.query.filter_by(username=username).first():
             flash('Username already exists.', 'error')
-            return render_template('users/form.html', user=None, title='Register User', roles=_roles())
+            return render_template('users/form.html', user=None, title='Register User', roles=_roles(), countries=_countries())
 
+        project_id = request.form.get('project_id', '').strip()
         user = User(
             username   = username,
             name       = request.form['name'].strip(),
             email      = request.form.get('email', '').strip(),
             department = request.form.get('department', '').strip(),
+            project_id = int(project_id) if project_id else None,
             role       = request.form.get('role', 'user'),
             status     = request.form.get('status', 'active'),
         )
@@ -212,11 +229,10 @@ def new():
                 to_email = user.email,
                 to_name  = user.name,
                 username = user.username,
-                password = password,   # plain text — only sent once on creation
                 role     = user.role
             )
             if ok:
-                flash(f'✓ User {user.name} registered and welcome email sent to {user.email}.', 'success')
+                flash(f'✓ User {user.name} registered and account notification sent to {user.email}.', 'success')
             else:
                 flash(f'✓ User {user.name} registered but email failed: {err}', 'warning')
         elif send_email and not user.email:
@@ -226,7 +242,7 @@ def new():
 
         return redirect(url_for('users.index'))
 
-    return render_template('users/form.html', user=None, title='Register New User', roles=_roles())
+    return render_template('users/form.html', user=None, title='Register New User', roles=_roles(), countries=_countries())
 
 
 @users_bp.route('/roles')
@@ -304,12 +320,14 @@ def edit(user_id):
         dup = User.query.filter_by(username=new_username).first()
         if dup and dup.id != user_id:
             flash('Username already taken.', 'error')
-            return render_template('users/form.html', user=user, title='Edit User', roles=_roles())
+            return render_template('users/form.html', user=user, title='Edit User', roles=_roles(), countries=_countries())
 
+        project_id = request.form.get('project_id', '').strip()
         user.username   = new_username
         user.name       = request.form['name'].strip()
         user.email      = request.form.get('email', '').strip()
         user.department = request.form.get('department', '').strip()
+        user.project_id = int(project_id) if project_id else None
         user.role       = request.form.get('role', user.role)
         user.status     = request.form.get('status', user.status)
 
@@ -321,7 +339,7 @@ def edit(user_id):
         flash(f'✓ {user.name} updated successfully.', 'success')
         return redirect(url_for('users.index'))
 
-    return render_template('users/form.html', user=user, title='Edit User', roles=_roles())
+    return render_template('users/form.html', user=user, title='Edit User', roles=_roles(), countries=_countries())
 
 
 @users_bp.route('/<int:user_id>/delete', methods=['POST'])

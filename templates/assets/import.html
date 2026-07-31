@@ -5,7 +5,6 @@
 
 <div class="page-title">
   <div class="page-title-text">
-    <h2>Bulk Import Assets from Excel</h2>
     <p>Upload your existing asset spreadsheet. Tags will be used exactly as you have them — no auto-generation.</p>
   </div>
   <a href="{{ url_for('assets.index') }}" class="btn btn-outline">← Back to Assets</a>
@@ -34,7 +33,7 @@
           <tr><td class="font-mono">category</td><td>No</td><td>Laptop <em>or</em> LP</td><td>Category name or code</td></tr>
           <tr><td class="font-mono">vendor</td><td>No</td><td>TechHub Uganda</td><td>Vendor name — must exist in system</td></tr>
           <tr><td class="font-mono">serial_number</td><td>No</td><td>SN-DELL-001</td><td>Manufacturer serial number</td></tr>
-          <tr><td class="font-mono">price</td><td>No</td><td>1800000</td><td>Purchase price in UGX — numbers only</td></tr>
+          <tr><td class="font-mono">price</td><td>No</td><td>1800000</td><td>Purchase price in USD — numbers only</td></tr>
           <tr><td class="font-mono">date_purchased</td><td>No</td><td>2024-01-15</td><td>Format: YYYY-MM-DD or DD/MM/YYYY</td></tr>
           <tr><td class="font-mono">condition</td><td>No</td><td>good</td><td>new / good / fair / poor</td></tr>
           <tr><td class="font-mono">location</td><td>No</td><td>Kampala Office</td><td>Where the asset is kept</td></tr>
@@ -80,6 +79,9 @@
     <div style="padding:24px">
       <div class="form-group">
         <label>Select .xlsx File *</label>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px">
+          <a href="{{ url_for('assets.download_import_template') }}" class="btn btn-outline btn-sm">📥 Download Excel Template</a>
+        </div>
         <input type="file" name="file" accept=".xlsx"
                style="padding:8px 12px;border:2px dashed var(--border);border-radius:var(--radius);width:100%;cursor:pointer;background:var(--surface2)"
                required>

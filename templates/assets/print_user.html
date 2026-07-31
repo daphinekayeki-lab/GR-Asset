@@ -40,7 +40,7 @@ body{font-family:'DM Sans',sans-serif;color:var(--text);font-size:13px;line-heig
 <body>
 <div class="no-print">
   <a href="javascript:window.print()" class="btn btn-primary">🖨 Print / Save PDF</a>
-  <a href="{{ url_for('main.dashboard') if current_user.role == 'user' else url_for('assets.assign_user', user_id=user.id) }}" class="btn btn-outline">← Back</a>
+  <a href="{{ url_for('main.dashboard') if current_user.is_staff_portal else url_for('assets.assign_user', user_id=user.id) }}" class="btn btn-outline">← Back</a>
   <span style="font-size:13px;color:var(--text-muted)">Asset Acknowledgement Form for <strong>{{ user.name }}</strong> — {{ assets|length }} asset(s)</span>
 </div>
 
@@ -89,8 +89,8 @@ body{font-family:'DM Sans',sans-serif;color:var(--text);font-size:13px;line-heig
       </div>
       <div class="asset-grid">
         <div class="field"><div class="label">Asset Name</div><div class="val">{{ a.name }}</div></div>
-        <div class="field"><div class="label">Category</div><div class="val">{{ a.category.name }}</div></div>
-        <div class="field"><div class="label">Country</div><div class="val">{{ a.project.name }} ({{ a.project.code }})</div></div>
+        <div class="field"><div class="label">Category</div><div class="val">{{ a.category.name if a.category else '—' }}</div></div>
+        <div class="field"><div class="label">Country</div><div class="val">{{ a.project.name if a.project else '—' }}{% if a.project and a.project.code %} ({{ a.project.code }}){% endif %}</div></div>
         <div class="field"><div class="label">Vendor</div><div class="val">{{ a.vendor.name if a.vendor else '—' }}</div></div>
         <div class="field"><div class="label">Purchase Price</div><div class="val">{{ a.price|currency }}</div></div>
         <div class="field"><div class="label">Date Purchased</div><div class="val">{{ a.date_purchased|dateformat }}</div></div>

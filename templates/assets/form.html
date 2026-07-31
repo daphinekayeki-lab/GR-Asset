@@ -3,7 +3,7 @@
 {% block page_title %}{{ title }}{% endblock %}
 {% block content %}
 <div class="page-title">
-  <div class="page-title-text"><h2>{{ title }}</h2><p>{% if asset %}Edit asset details below.{% else %}Fill in all required fields to register a new asset.{% endif %}</p></div>
+  <div class="page-title-text"><p>{% if asset %}Edit asset details below.{% else %}Fill in all required fields to register a new asset.{% endif %}</p></div>
   <a href="{{ url_for('assets.index') }}" class="btn btn-outline">← Back to Assets</a>
 </div>
 
@@ -20,6 +20,14 @@
             <option value="">Select category</option>
             {% for c in categories %}<option value="{{ c.id }}" {% if asset and asset.category_id == c.id %}selected{% endif %}>{{ c.name }} ({{ c.code }})</option>{% endfor %}
           </select>
+        </div>
+        <div class="form-group">
+          <label>Country *</label>
+          <select name="project_id" required>
+            <option value="">Select country</option>
+            {% for p in projects %}<option value="{{ p.id }}" {% if asset and asset.project_id == p.id %}selected{% endif %}>{{ p.name }} ({{ p.code }})</option>{% endfor %}
+          </select>
+          {% if not asset %}<span style="font-size:11px;color:var(--text-muted);display:block;margin-top:4px">Sets the country code in the asset tag (e.g. GR-UG-LP-0001).</span>{% endif %}
         </div>
         <div class="form-group">
           <label>Processor</label>
@@ -40,7 +48,7 @@
           <label>Age (months)</label>
           <input name="age_months" type="number" min="0" max="11" value="{{ asset.age_months if asset and asset.age_months is not none else '' }}" placeholder="optional">
         </div>
-        <div class="form-group"><label>Purchase Price (UGX)</label><input name="price" type="number" value="{{ asset.price if asset else '' }}" placeholder="0"></div>
+        <div class="form-group"><label>Purchase Price (USD)</label><input name="price" type="number" value="{{ asset.price if asset else '' }}" placeholder="0"></div>
         <div class="form-group"><label>Date Purchased</label><input name="date_purchased" type="date" value="{{ asset.date_purchased.isoformat() if asset and asset.date_purchased else '' }}"></div>
         <div class="form-group">
           <label>Condition</label>

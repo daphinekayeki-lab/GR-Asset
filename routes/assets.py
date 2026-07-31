@@ -1,5 +1,5 @@
 from flask import (Blueprint, render_template, redirect, url_for,
-                   flash, request, abort, make_response)
+                   flash, request, abort, make_response, send_file)
 from flask_login import login_required, current_user
 from models import Asset, AssetCategory, Project, Vendor, User, ReturnRecord
 from extensions import db
@@ -7,10 +7,8 @@ from datetime import date, datetime
 from functools import wraps
 import csv
 import io
-from reportlab.lib.pagesizes import letter
-from reportlab.lib import colors
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+import os
+from pdf_utils import build_gr_pdf, build_pdf_table, asset_register_col_widths, pdf_response
 
 assets_bp = Blueprint('assets', __name__)
 
@@ -68,7 +66,7 @@ def _asset_query():
     cond = request.args.get('condition', '').strip()
 
     query = Asset.query.filter_by(status='active')
-    if current_user.role == 'user':
+    if current_user.is_staff_portal:
         query = query.filter_by(assigned_to_id=current_user.id)
     if q:
         query = query.filter(
@@ -91,7 +89,7 @@ def _build_asset_rows(assets):
     for a in assets:
         rows.append([
             a.tag,
-            a.category.name,
+            a.category.name if a.category else '—',
             a.name,
             a.processor or '—',
             a.serial_number or '—',
@@ -157,35 +155,11 @@ def download_csv():
 @login_required
 def download_pdf():
     assets = _asset_query().all()
-    buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter,
-                            rightMargin=30, leftMargin=30,
-                            topMargin=30, bottomMargin=18)
-    styles = getSampleStyleSheet()
-    elements = []
 
-    title = Paragraph('GR Asset Management System - Asset Register', styles['Title'])
-    elements.append(title)
-    elements.append(Spacer(1, 12))
+    def body(doc):
+        return [build_pdf_table(_build_asset_rows(assets), asset_register_col_widths(doc.width))]
 
-    asset_table = Table(_build_asset_rows(assets), repeatRows=1)
-    asset_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1a3a5c')),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-        ('GRID', (0, 0), (-1, -1), 0.25, colors.grey),
-        ('BACKGROUND', (0, 1), (-1, -1), colors.whitesmoke),
-    ]))
-    elements.append(asset_table)
-
-    doc.build(elements)
-    pdf = buffer.getvalue()
-    buffer.close()
-
-    response = make_response(pdf)
-    response.headers['Content-Type'] = 'application/pdf'
-    response.headers['Content-Disposition'] = 'attachment; filename=gr_assets.pdf'
-    return response
+    return pdf_response(build_gr_pdf(body), 'gr_assets.pdf')
 
 
 # ── Register asset ─────────────────────────────────────────────────────────
@@ -200,13 +174,18 @@ def new():
 
     if request.method == 'POST':
         cat_id      = request.form.get('category_id', type=int)
-        proj_id     = request.form.get('project_id',  type=int) or None
+        proj_id     = request.form.get('project_id',  type=int)
+        if not proj_id:
+            flash('Please select a country.', 'error')
+            return render_template('assets/form.html',
+                                   categories=categories, projects=projects,
+                                   vendors=vendors, users=users,
+                                   asset=None, title='Register New Asset')
         cat         = AssetCategory.query.get_or_404(cat_id)
-        proj        = Project.query.get(proj_id) if proj_id else None
+        proj        = Project.query.get_or_404(proj_id)
 
         num = _next_asset_number()
-        proj_obj = proj if proj else _get_or_create_default_project()
-        proj_code = proj_obj.code
+        proj_code = proj.code
         tag = _build_tag(proj_code, num, cat.code)
 
         assign_id = request.form.get('assigned_to_id', type=int) or None
@@ -227,7 +206,7 @@ def new():
             condition      = request.form.get('condition', 'good'),
             location       = request.form.get('location', '').strip(),
             category_id    = cat_id,
-            project_id     = proj_obj.id,
+            project_id     = proj.id,
             vendor_id      = request.form.get('vendor_id', type=int) or None,
             assigned_to_id = assign_id,
             assigned_on    = date.today() if assign_id else None,
@@ -260,9 +239,15 @@ def edit(asset_id):
 
     if request.method == 'POST':
         cat_id      = request.form.get('category_id', type=int)
-        proj_id     = request.form.get('project_id',  type=int) or None
+        proj_id     = request.form.get('project_id',  type=int)
+        if not proj_id:
+            flash('Please select a country.', 'error')
+            return render_template('assets/form.html',
+                                   categories=categories, projects=projects,
+                                   vendors=vendors, users=users,
+                                   asset=asset, title='Edit Asset')
         cat         = AssetCategory.query.get_or_404(cat_id)
-        proj        = Project.query.get(proj_id) if proj_id else None
+        proj        = Project.query.get_or_404(proj_id)
 
         new_assign = request.form.get('assigned_to_id', type=int) or None
         dp = request.form.get('date_purchased')
@@ -275,16 +260,15 @@ def edit(asset_id):
         asset.condition      = request.form.get('condition', 'good')
         asset.location       = request.form.get('location', '').strip()
         asset.category_id    = cat_id
-        asset.project_id     = proj_id
+        asset.project_id     = proj.id
         asset.vendor_id      = request.form.get('vendor_id', type=int) or None
         asset.processor      = request.form.get('processor', '').strip() or None
         asset.age_years      = request.form.get('age_years', type=int) or None
         asset.age_months     = request.form.get('age_months', type=int) or None
         asset.updated_at     = datetime.utcnow()
 
-        # Rebuild tag
-        proj_obj = proj if proj else _get_or_create_default_project()
-        asset.tag = _build_tag(proj_obj.code, asset.asset_number, cat.code)
+        # Rebuild tag from country + category
+        asset.tag = _build_tag(proj.code, asset.asset_number, cat.code)
 
         # Track assignment date change
         if new_assign != asset.assigned_to_id:
@@ -376,18 +360,295 @@ def return_asset(asset_id):
     """
     asset = Asset.query.get_or_404(asset_id)
     # Always redirect staff to the request-based return flow
-    if current_user.role == 'user':
+    if current_user.is_staff_portal:
         return redirect(url_for('requests.new_return_request', asset_id=asset_id))
     # Admin direct return (from assign page unassign button) — keep as-is
     abort(403)
 
 
 # ── Print form ─────────────────────────────────────────────────────────────
+@assets_bp.route('/<int:asset_id>')
+@login_required
+def detail(asset_id):
+    asset = Asset.query.get_or_404(asset_id)
+    if current_user.is_staff_portal and asset.assigned_to_id != current_user.id:
+        abort(403)
+    return render_template('assets/detail.html', asset=asset)
+
+
+@assets_bp.route('/<int:asset_id>/receipt.pdf')
+@login_required
+def asset_receipt_pdf(asset_id):
+    from pdf_utils import build_gr_pdf, build_pdf_table, scaled_col_widths, pdf_response
+    from reportlab.platypus import Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet
+
+    asset = Asset.query.get_or_404(asset_id)
+    if current_user.is_staff_portal and asset.assigned_to_id != current_user.id:
+        abort(403)
+    user = asset.assigned_user or current_user
+
+    rows = [
+        ['Field', 'Value'],
+        ['Asset Tag', asset.tag],
+        ['Asset Name', asset.name],
+        ['Category', asset.category.name if asset.category else '—'],
+        ['Country', asset.project.name if asset.project else '—'],
+        ['Serial Number', asset.serial_number or '—'],
+        ['Condition', asset.condition.title()],
+        ['Assigned To', user.name],
+        ['Department', user.department or '—'],
+        ['Assigned On', asset.assigned_on.strftime('%d %b %Y') if asset.assigned_on else '—'],
+        ['Purchase Value', f'USD {float(asset.price or 0):,.2f}'],
+    ]
+
+    def body(doc):
+        styles = getSampleStyleSheet()
+        title = Paragraph(f'Asset Receipt — {asset.tag}', styles['Heading2'])
+        return [
+            title,
+            Spacer(1, 8),
+            build_pdf_table(rows, scaled_col_widths([80, 200], doc.width)),
+        ]
+
+    return pdf_response(build_gr_pdf(body), f'receipt_{asset.tag}.pdf')
+
+
+@assets_bp.route('/<int:asset_id>/qrcode.pdf')
+@login_required
+def asset_qrcode_pdf(asset_id):
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.platypus import SimpleDocTemplate
+
+    asset = Asset.query.get_or_404(asset_id)
+    if current_user.is_staff_portal and asset.assigned_to_id != current_user.id:
+        abort(403)
+
+    page_width, page_height = landscape(A4)
+    label_width = 260
+    label_height = 80
+    qr_size = 64
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=landscape(A4),
+        leftMargin=28,
+        rightMargin=28,
+        topMargin=28,
+        bottomMargin=28,
+    )
+
+    label = _build_asset_qr_label(asset, label_width, label_height, qr_size)
+    doc.build([label])
+    pdf_bytes = buffer.getvalue()
+    buffer.close()
+    return pdf_response(pdf_bytes, f'{asset.tag}_qr.pdf')
+
+
+@assets_bp.route('/qrcodes/pdf')
+@login_required
+def asset_qrcodes_pdf():
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Spacer
+    from reportlab.lib import colors
+
+    assets = _asset_query().all()
+
+    page_width, page_height = landscape(A4)
+    gutter = 8
+    label_width = 260
+    label_height = 80
+    qr_size = 64
+
+    labels = [_build_asset_qr_label(asset, label_width, label_height, qr_size) for asset in assets]
+    rows = []
+    row_heights = []
+    for i in range(0, len(labels), 2):
+        first = labels[i]
+        second = labels[i + 1] if i + 1 < len(labels) else Spacer(label_width, label_height)
+        rows.append([first, Spacer(gutter, label_height), second])
+        row_heights.append(label_height)
+        if i + 2 < len(labels):
+            rows.append([Spacer(label_width, 12), Spacer(gutter, 12), Spacer(label_width, 12)])
+            row_heights.append(12)
+
+    table = Table(rows, colWidths=[label_width, gutter, label_width], rowHeights=row_heights, hAlign='LEFT')
+    table.setStyle(TableStyle([
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ('TOPPADDING', (0, 0), (-1, -1), 0),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+    ]))
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=landscape(A4),
+        leftMargin=28,
+        rightMargin=28,
+        topMargin=28,
+        bottomMargin=28,
+    )
+    doc.build([table])
+    pdf_bytes = buffer.getvalue()
+    buffer.close()
+    return pdf_response(pdf_bytes, 'gr_asset_qrcodes.pdf')
+
+
+def _asset_qr_payload(asset):
+    return '\n'.join([
+        f'GR Asset Tag: {asset.tag}',
+        f'Name: {asset.name}',
+        f'Category: {asset.category.name if asset.category else "—"}',
+        f'Country: {asset.project.name if asset.project else "—"}',
+        f'Location: {asset.location or "—"}',
+        f'Serial Number: {asset.serial_number or "—"}',
+        f'Condition: {asset.condition.title()}',
+        f'Assigned To: {asset.assigned_user.name if asset.assigned_user else "—"}',
+        f'Assigned On: {asset.assigned_on.strftime("%d %b %Y") if asset.assigned_on else "—"}',
+    ])
+
+
+def _load_logo_image(logo_path, width, height):
+    from reportlab.platypus import Image as RLImage, Spacer as RLSpacer
+
+    if not os.path.isfile(logo_path):
+        return RLSpacer(width, height)
+
+    try:
+        return RLImage(logo_path, width=width, height=height)
+    except Exception:
+        return RLSpacer(width, height)
+
+
+def _build_asset_qr_label(asset, label_width, label_height, qr_size):
+    from reportlab.graphics.barcode.qr import QrCodeWidget
+    from reportlab.graphics.shapes import Drawing
+    from reportlab.platypus import Image, Paragraph, Spacer, Table, TableStyle
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib import colors
+
+    qr = QrCodeWidget(_asset_qr_payload(asset), barWidth=qr_size, barHeight=qr_size, x=0, y=0)
+    qr_group = qr.draw()
+    qr_drawing = Drawing(qr_size, qr_size)
+    qr_drawing.add(qr_group)
+
+    heading_style = ParagraphStyle('QrLabelHeading', fontName='Helvetica-Bold', fontSize=12, textColor=colors.HexColor('#0f172a'), leading=14, alignment=1)
+    tag_style = ParagraphStyle('QrLabelTag', fontName='Helvetica', fontSize=12, textColor=colors.HexColor('#0f172a'), leading=14, alignment=1)
+    detail_style = ParagraphStyle('QrLabelDetail', fontName='Helvetica', fontSize=12, textColor=colors.HexColor('#0f172a'), leading=14, alignment=1)
+    note_style = ParagraphStyle('QrLabelNote', fontName='Helvetica', fontSize=7, textColor=colors.HexColor('#475569'), leading=9, alignment=1)
+
+    center_width = label_width - qr_size - 54
+    center_content = Table([
+        [Paragraph('GR ASSET TAG', heading_style)],
+        [Spacer(1, 1)],
+        [Paragraph(asset.tag, tag_style)],
+        [Spacer(1, 1)],
+        [Paragraph(asset.name or '', detail_style)],
+        [Spacer(1, 1)],
+        [Paragraph('Scan to view asset details', note_style)],
+    ], colWidths=[center_width - 4])
+    center_content.setStyle(TableStyle([
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 1),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 1),
+        ('TOPPADDING', (0, 0), (-1, -1), 0),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+    ]))
+
+    center_block = Table([[center_content]], colWidths=[center_width], rowHeights=[qr_size])
+    center_block.setStyle(TableStyle([
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ('TOPPADDING', (0, 0), (-1, -1), 0),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+    ]))
+
+    static_img_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'static', 'img'))
+    logo_path = None
+    for filename in ('GR.png', 'GR.jpg'):
+        candidate = os.path.join(static_img_dir, filename)
+        if os.path.isfile(candidate):
+            logo_path = candidate
+            break
+
+    right_logo = _load_logo_image(logo_path or os.path.join(static_img_dir, 'GR.jpg'), width=48, height=48)
+
+    logo_block = Table([
+        [right_logo]
+    ], colWidths=[54], rowHeights=[label_height])
+    logo_block.setStyle(TableStyle([
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ('TOPPADDING', (0, 0), (-1, -1), 0),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+    ]))
+
+    qr_block = Table([[qr_drawing]], colWidths=[qr_size], rowHeights=[qr_size])
+    qr_block.setStyle(TableStyle([
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ('TOPPADDING', (0, 0), (-1, -1), 0),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+    ]))
+
+    label = Table([
+        [logo_block, center_block, qr_block]
+    ], colWidths=[54, center_width, qr_size], rowHeights=[label_height])
+    label.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 1),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 1),
+        ('TOPPADDING', (0, 0), (-1, -1), 1),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 1),
+        ('BOX', (0, 0), (-1, -1), 0.75, colors.HexColor('#1a3a5c')),
+    ]))
+    return label
+
+
+def build_asset_info_table(rows, width):
+    from reportlab.platypus import Table, TableStyle, Paragraph
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.lib import colors
+
+    styles = getSampleStyleSheet()
+    header_style = styles['Heading6']
+    header_style.fontSize = 8
+    body_style = styles['BodyText']
+    body_style.fontSize = 7
+
+    data = []
+    for idx, row in enumerate(rows):
+        label = Paragraph(str(row[0]), header_style if idx == 0 else body_style)
+        value = Paragraph(str(row[1]), header_style if idx == 0 else body_style)
+        data.append([label, value])
+
+    table = Table(data, colWidths=[width * 0.35, width * 0.65])
+    table.setStyle(TableStyle([
+        ('GRID', (0, 0), (-1, -1), 0.25, colors.HexColor('#d1d5db')),
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#f3f4f6')),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 4),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+    ]))
+    return table
+
+
 @assets_bp.route('/print/<int:asset_id>')
 @login_required
 def print_form(asset_id):
     """Single-asset print (admin use). Staff get all-assets form."""
-    if current_user.role == 'user':
+    if current_user.is_staff_portal:
         # Redirect staff to their full custody form
         return redirect(url_for('assets.print_user_form', user_id=current_user.id))
 
@@ -399,7 +660,7 @@ def print_form(asset_id):
 @login_required
 def print_user_form(user_id):
     """Print all assets for a given user (staff see their own, admin sees any)."""
-    if current_user.role == 'user' and current_user.id != user_id:
+    if current_user.is_staff_portal and current_user.id != user_id:
         abort(403)
     user   = User.query.get_or_404(user_id)
     assets = Asset.query.filter_by(assigned_to_id=user_id, status='active')\
@@ -412,6 +673,55 @@ def print_user_form(user_id):
 # ─────────────────────────────────────────────
 #  BULK IMPORT FROM EXCEL
 # ─────────────────────────────────────────────
+
+@assets_bp.route('/import/template')
+@login_required
+@admin_required
+def download_import_template():
+    try:
+        import openpyxl
+    except ImportError:
+        flash('openpyxl is not installed. Run: pip install openpyxl', 'error')
+        return redirect(url_for('assets.bulk_import'))
+
+    project = Project.query.order_by(Project.name).first()
+    category = AssetCategory.query.order_by(AssetCategory.name).first()
+    vendor = Vendor.query.order_by(Vendor.name).first()
+    user = User.query.filter_by(status='active').order_by(User.name).first()
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = 'Assets'
+    ws.append([
+        'tag', 'name', 'country', 'category', 'vendor', 'serial_number',
+        'price', 'date_purchased', 'condition', 'location', 'assigned_to', 'description',
+    ])
+    ws.append([
+        'GR-UG-LP-0001',
+        'Dell Latitude 5420',
+        project.name if project else 'Uganda',
+        category.name if category else 'Laptop',
+        vendor.name if vendor else '',
+        'SN-DELL-001',
+        1800000,
+        '2024-01-15',
+        'good',
+        'Kampala Office',
+        user.username if user else '',
+        'Intel Core i5, 8GB RAM',
+    ])
+
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+
+    return send_file(
+        buffer,
+        download_name='asset_import_template.xlsx',
+        as_attachment=True,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    )
+
 
 @assets_bp.route('/import', methods=['GET', 'POST'])
 @login_required
@@ -503,8 +813,8 @@ def bulk_import():
         if not category:
             errors.append(f'Row {i} ({tag}): Category "{cat_val}" not found — will be left blank.')
 
-        # Resolve project
-        proj_val = col(row, 'project') or col(row, 'project_code') or ''
+        # Resolve project / country
+        proj_val = col(row, 'country') or col(row, 'project') or col(row, 'project_code') or ''
         project  = proj_map.get(proj_val.lower()) or proj_code.get(proj_val.lower())
         if not project:
             errors.append(f'Row {i} ({tag}): Project "{proj_val}" not found — row skipped.')
@@ -522,7 +832,7 @@ def bulk_import():
         # Parse price
         price_val = col(row, 'price') or col(row, 'purchase_price') or '0'
         try:
-            price = float(str(price_val).replace(',', '').replace('UGX', '').strip() or 0)
+            price = float(str(price_val).replace(',', '').replace('UGX', '').replace('USD', '').strip() or 0)
         except ValueError:
             price = 0
 

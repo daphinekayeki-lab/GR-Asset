@@ -15,19 +15,33 @@ class User(UserMixin, db.Model):
     name          = db.Column(db.String(150), nullable=False)
     email         = db.Column(db.String(150))
     department    = db.Column(db.String(100))
+    project_id    = db.Column(db.Integer, db.ForeignKey('projects.id'))
     role          = db.Column(db.String(20),  nullable=False, default='user')
     status        = db.Column(db.String(20),  nullable=False, default='active')
     created_at    = db.Column(db.DateTime,    default=datetime.utcnow)
     assigned_assets = db.relationship('Asset', foreign_keys='Asset.assigned_to_id',
                                       backref='assigned_user', lazy='dynamic')
+    project         = db.relationship('Project', backref='users')
     return_records  = db.relationship('ReturnRecord', backref='user',
                                       foreign_keys='ReturnRecord.user_id', lazy='dynamic')
     def set_password(self, pw): self.password_hash = generate_password_hash(pw)
     def check_password(self, pw): return check_password_hash(self.password_hash, pw)
+    def get_auth_token(self):
+        return self.session_token or ''
+
     @property
     def initials(self):
         p = self.name.split()
         return ''.join(x[0] for x in p[:2]).upper()
+
+    @property
+    def is_staff_portal(self):
+        """Staff users with personal assets, requests, and profile (user + finance)."""
+        return self.role in ('user', 'finance')
+
+    session_token = db.Column(db.String(128), nullable=True)
+    last_login_at = db.Column(db.DateTime)
+    last_login_ip = db.Column(db.String(100))
 
     @property
     def role_label(self):
@@ -36,6 +50,20 @@ class User(UserMixin, db.Model):
         if role:
             return role.label
         return {'admin':'Administrator','finance':'Finance Officer','user':'Staff User'}.get(self.role, self.role)
+
+class AuditLog(db.Model):
+    __tablename__ = 'audit_logs'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    event_type = db.Column(db.String(50), nullable=False)
+    target_type = db.Column(db.String(50))
+    target_id = db.Column(db.String(100))
+    details = db.Column(db.Text)
+    ip_address = db.Column(db.String(100))
+    user_agent = db.Column(db.String(255))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user = db.relationship('User', foreign_keys=[user_id])
 
 class Role(db.Model):
     __tablename__ = 'roles'
@@ -148,6 +176,9 @@ class AssetRequest(db.Model):
     duration_days   = db.Column(db.Integer)                       # number of days needed
     date_needed_from= db.Column(db.Date)
     date_needed_to  = db.Column(db.Date)
+    project_id      = db.Column(db.Integer, db.ForeignKey('projects.id'))
+    department      = db.Column(db.String(100))
+    priority        = db.Column(db.String(20), default='medium')
     admin_note      = db.Column(db.Text)
     requested_at    = db.Column(db.DateTime, default=datetime.utcnow)
     reviewed_at     = db.Column(db.DateTime)
@@ -156,3 +187,45 @@ class AssetRequest(db.Model):
     reviewed_by    = db.relationship('User',          foreign_keys=[reviewed_by_id])
     category       = db.relationship('AssetCategory', foreign_keys=[category_id])
     assigned_asset = db.relationship('Asset',         foreign_keys=[assigned_asset_id])
+    country        = db.relationship('Project',       foreign_keys=[project_id])
+
+
+class RepairRequest(db.Model):
+    """User submits a repair request for an assigned asset."""
+    __tablename__ = 'repair_requests'
+    id               = db.Column(db.Integer, primary_key=True)
+    asset_id         = db.Column(db.Integer, db.ForeignKey('assets.id'), nullable=False)
+    requested_by_id  = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    reviewed_by_id   = db.Column(db.Integer, db.ForeignKey('users.id'))
+    problem_category = db.Column(db.String(30), nullable=False)
+    description      = db.Column(db.Text, nullable=False)
+    priority         = db.Column(db.String(20), default='medium', nullable=False)
+    photo_path       = db.Column(db.String(255))
+    status           = db.Column(db.String(30), default='pending', nullable=False)
+    admin_note       = db.Column(db.Text)
+    requested_at     = db.Column(db.DateTime, default=datetime.utcnow)
+    reviewed_at      = db.Column(db.DateTime)
+
+    asset        = db.relationship('Asset', foreign_keys=[asset_id])
+    requested_by = db.relationship('User',  foreign_keys=[requested_by_id])
+    reviewed_by  = db.relationship('User',  foreign_keys=[reviewed_by_id])
+
+
+class DamageReport(db.Model):
+    """User reports damage, loss, or maintenance need."""
+    __tablename__ = 'damage_reports'
+    id              = db.Column(db.Integer, primary_key=True)
+    asset_id        = db.Column(db.Integer, db.ForeignKey('assets.id'))
+    reported_by_id  = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    reviewed_by_id  = db.Column(db.Integer, db.ForeignKey('users.id'))
+    report_type     = db.Column(db.String(30), nullable=False)
+    description     = db.Column(db.Text, nullable=False)
+    priority        = db.Column(db.String(20), default='medium', nullable=False)
+    status          = db.Column(db.String(30), default='pending', nullable=False)
+    admin_note      = db.Column(db.Text)
+    reported_at     = db.Column(db.DateTime, default=datetime.utcnow)
+    reviewed_at     = db.Column(db.DateTime)
+
+    asset       = db.relationship('Asset', foreign_keys=[asset_id])
+    reported_by = db.relationship('User',  foreign_keys=[reported_by_id])
+    reviewed_by = db.relationship('User',  foreign_keys=[reviewed_by_id])

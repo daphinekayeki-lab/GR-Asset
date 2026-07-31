@@ -1,8 +1,21 @@
 """GR Asset Management System — app factory"""
-from flask import Flask
-from extensions import db, login_manager
 from datetime import datetime
+from urllib.parse import urljoin, urlparse
 import os
+
+from flask import Flask, render_template, request, url_for
+from flask_wtf.csrf import CSRFProtect, generate_csrf
+from extensions import db, login_manager, limiter
+
+csrf = CSRFProtect()
+
+
+def _is_safe_url(target):
+    if not target:
+        return False
+    ref_url = urlparse(request.host_url)
+    test_url = urlparse(urljoin(request.host_url, target))
+    return test_url.scheme in ('http', 'https') and ref_url.netloc == test_url.netloc
 
 
 def create_app():
@@ -11,11 +24,26 @@ def create_app():
     # ── Load .env file if it exists ──────────────────────────────
     _load_env(os.path.join(os.path.dirname(__file__), '.env'))
 
-    app.config['SECRET_KEY'] = 'gr-ams-secret-key-2024'
+    app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'change-this-secret-key')
     app.config['SQLALCHEMY_DATABASE_URI'] = (
         'sqlite:///' + os.path.join(app.instance_path, 'gr_ams.db')
     )
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    app.config['TEMPLATES_AUTO_RELOAD'] = True
+    app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
+    app.config['WTF_CSRF_TIME_LIMIT'] = 3600
+    app.config['WTF_CSRF_CHECK_DEFAULT'] = True
+    app.config['WTF_CSRF_METHODS'] = ['POST', 'PUT', 'PATCH', 'DELETE']
+    app.config['SESSION_COOKIE_HTTPONLY'] = True
+    app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+    app.config['SESSION_COOKIE_SECURE'] = os.environ.get('FLASK_ENV', '').lower() == 'production'
+    app.config['REMEMBER_COOKIE_HTTPONLY'] = True
+    app.config['REMEMBER_COOKIE_DURATION'] = 60 * 60 * 24 * 30
+    app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024
+    app.config['RATELIMIT_HEADERS_ENABLED'] = True
+    app.config['ADMIN_EMAIL'] = os.environ.get('ADMIN_EMAIL', os.environ.get('MAIL_USERNAME', ''))
+    app.config['PREFERRED_URL_SCHEME'] = 'https'
+
     os.makedirs(app.instance_path, exist_ok=True)
 
     # ── Mail config (loaded from .env) ───────────────────────────
@@ -29,6 +57,8 @@ def create_app():
 
     db.init_app(app)
     login_manager.init_app(app)
+    limiter.init_app(app)
+    csrf.init_app(app)
 
     from routes.auth     import auth_bp
     from routes.main     import main_bp
@@ -46,10 +76,50 @@ def create_app():
     app.register_blueprint(reports_bp,  url_prefix='/reports')
     app.register_blueprint(requests_bp, url_prefix='/requests')
 
+    @app.after_request
+    def set_security_headers(response):
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        response.headers['X-Frame-Options'] = 'DENY'
+        response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+        response.headers['Permissions-Policy'] = 'geolocation=(), microphone=(), camera=()'
+        response.headers['X-XSS-Protection'] = '0'
+        response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; object-src 'none'; frame-ancestors 'none';"
+        if request.is_secure:
+            response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains; preload'
+        response.set_cookie('csrf_token', generate_csrf(), secure=app.config['SESSION_COOKIE_SECURE'], httponly=False, samesite='Lax')
+        return response
+
+    @app.context_processor
+    def inject_globals():
+        from flask_login import current_user
+        counts = {
+            'pending_asset_requests': 0,
+            'pending_return_requests': 0,
+            'pending_repair_requests': 0,
+            'pending_damage_reports': 0,
+        }
+        try:
+            if current_user.is_authenticated and current_user.role in ('admin', 'finance'):
+                from models import AssetRequest, ReturnRequest, RepairRequest, DamageReport
+                counts['pending_asset_requests']  = AssetRequest.query.filter_by(status='pending').count()
+                counts['pending_return_requests'] = ReturnRequest.query.filter_by(status='pending').count()
+                counts['pending_repair_requests'] = RepairRequest.query.filter_by(status='pending').count()
+                counts['pending_damage_reports']  = DamageReport.query.filter_by(status='pending').count()
+        except Exception:
+            pass
+        counts['now'] = datetime.utcnow()
+        counts['is_staff_portal'] = (
+            current_user.is_authenticated
+            and current_user.role in ('user', 'finance')
+        )
+        counts['app_build'] = '2026-07-08-staff-portal'
+        counts['privacy_policy_url'] = url_for('main.privacy_policy')
+        return counts
+
     @app.template_filter('currency')
     def currency_filter(v):
-        try:    return 'UGX {:,.0f}'.format(float(v or 0))
-        except: return 'UGX 0'
+        try:    return 'USD {:,.2f}'.format(float(v or 0))
+        except: return 'USD 0.00'
 
     @app.template_filter('dateformat')
     def date_filter(v):
@@ -58,20 +128,6 @@ def create_app():
             try: v = datetime.strptime(v, '%Y-%m-%d')
             except: return v
         return v.strftime('%d %b %Y')
-
-    @app.context_processor
-    def inject_globals():
-        from flask_login import current_user
-        counts = {'pending_asset_requests': 0, 'pending_return_requests': 0}
-        try:
-            if current_user.is_authenticated and current_user.role in ('admin', 'finance'):
-                from models import AssetRequest, ReturnRequest
-                counts['pending_asset_requests']  = AssetRequest.query.filter_by(status='pending').count()
-                counts['pending_return_requests'] = ReturnRequest.query.filter_by(status='pending').count()
-        except Exception:
-            pass
-        counts['now'] = datetime.utcnow()
-        return counts
 
     with app.app_context():
         db.create_all()
@@ -88,6 +144,28 @@ def create_app():
             alter_stmts.append("ALTER TABLE assets ADD COLUMN age_years INTEGER")
         if 'age_months' not in cols:
             alter_stmts.append("ALTER TABLE assets ADD COLUMN age_months INTEGER")
+        try:
+            user_cols = [r['name'] for r in db.session.execute(text("PRAGMA table_info('users')")).mappings()]
+        except Exception:
+            user_cols = []
+        if 'project_id' not in user_cols:
+            alter_stmts.append("ALTER TABLE users ADD COLUMN project_id INTEGER REFERENCES projects(id)")
+        if 'session_token' not in user_cols:
+            alter_stmts.append("ALTER TABLE users ADD COLUMN session_token TEXT")
+        if 'last_login_at' not in user_cols:
+            alter_stmts.append("ALTER TABLE users ADD COLUMN last_login_at DATETIME")
+        if 'last_login_ip' not in user_cols:
+            alter_stmts.append("ALTER TABLE users ADD COLUMN last_login_ip TEXT")
+        try:
+            ar_cols = [r['name'] for r in db.session.execute(text("PRAGMA table_info('asset_requests')")).mappings()]
+        except Exception:
+            ar_cols = []
+        if 'project_id' not in ar_cols:
+            alter_stmts.append("ALTER TABLE asset_requests ADD COLUMN project_id INTEGER REFERENCES projects(id)")
+        if 'department' not in ar_cols:
+            alter_stmts.append("ALTER TABLE asset_requests ADD COLUMN department TEXT")
+        if 'priority' not in ar_cols:
+            alter_stmts.append("ALTER TABLE asset_requests ADD COLUMN priority TEXT DEFAULT 'medium'")
         for s in alter_stmts:
             try:
                 db.session.execute(text(s))
@@ -96,7 +174,21 @@ def create_app():
         if alter_stmts:
             db.session.commit()
 
-        _seed()
+        try:
+            from models import User
+            if User.query.filter_by(username='user').first() is None:
+                legacy = User.query.filter_by(username='finance').first()
+                if legacy:
+                    legacy.username = 'user'
+                    legacy.role = 'user'
+                    legacy.set_password('user123')
+                    db.session.commit()
+        except Exception:
+            pass
+
+        if os.environ.get('FLASK_ENV', '').lower() != 'production':
+            _seed()
+            _ensure_demo_accounts()
 
     return app
 
@@ -119,9 +211,9 @@ def _seed():
         User(username='admin',   name='System Administrator', email='admin@gr.org',
              role='admin',   department='IT',       status='active',
              password_hash=generate_password_hash('admin123')),
-        User(username='finance', name='Sarah Nakato',          email='sarah@gr.org',
-             role='finance', department='Finance',  status='active',
-             password_hash=generate_password_hash('finance123')),
+        User(username='user',    name='Demo Staff User',       email='user@gr.org',
+             role='user',    department='Programs', status='active',
+             password_hash=generate_password_hash('user123')),
         User(username='john',    name='John Okello',           email='john@gr.org',
              role='user',    department='Programs', status='active',
              password_hash=generate_password_hash('user123')),
@@ -161,7 +253,7 @@ def _seed():
     lp,disc,prn  = cats[0],cats[1],cats[2]
     core,hlth,edu= projs[0],projs[1],projs[2]
     v1,v2,v3     = vendors[0],vendors[1],vendors[2]
-    john,sarah,mary = users[2],users[1],users[3]
+    john,demo_user,mary = users[2],users[1],users[3]
     def t(p,c,n): return f"GR-{c.code}-{p.code}-{n:03d}"
 
     assets = [
@@ -171,7 +263,7 @@ def _seed():
               description='Intel Core i5, 8GB RAM, 256GB SSD',location='Kampala Office'),
         Asset(asset_number=2,tag=t(core,lp,2),serial_number='SN-HP-002',name='HP ProBook 450',
               category=lp,project=core,vendor=v2,price=1500000,date_purchased=date(2024,1,20),
-              condition='good',status='active',assigned_to_id=sarah.id,assigned_on=date(2024,1,25),
+              condition='good',status='active',assigned_to_id=demo_user.id,assigned_on=date(2024,1,25),
               description='Intel Core i5, 8GB RAM',location='Kampala Office'),
         Asset(asset_number=3,tag=t(hlth,disc,1),serial_number='SN-DESK-003',name='HP Desktop ProDesk',
               category=disc,project=hlth,vendor=v1,price=1200000,date_purchased=date(2024,2,10),
@@ -187,6 +279,49 @@ def _seed():
     db.session.add_all(assets)
     db.session.commit()
     print("  Database seeded OK.")
+
+
+def _ensure_demo_accounts():
+    """Keep demo login accounts in sync so documented passwords always work."""
+    from models import User
+    from werkzeug.security import generate_password_hash
+
+    demos = [
+        dict(username='admin', password='admin123', name='System Administrator',
+             role='admin', email='admin@gr.org', department='IT'),
+        dict(username='user', password='user123', name='Demo Staff User',
+             role='user', email='user@gr.org', department='Programs'),
+        dict(username='john', password='user123', name='John Okello',
+             role='user', email='john@gr.org', department='Programs'),
+        dict(username='finance', password='finance123', name='Sarah Nakato',
+             role='finance', email='finance@gr.org', department='Finance'),
+    ]
+    for d in demos:
+        u = User.query.filter_by(username=d['username']).first()
+        if u:
+            u.name = d['name']
+            u.role = d['role']
+            u.email = d['email']
+            u.department = d['department']
+            u.status = 'active'
+            u.set_password(d['password'])
+        else:
+            db.session.add(User(
+                username=d['username'], name=d['name'], email=d['email'],
+                department=d['department'], role=d['role'], status='active',
+                password_hash=generate_password_hash(d['password']),
+            ))
+    db.session.commit()
+
+    from datetime import date
+    from models import Asset
+    finance_user = User.query.filter_by(username='finance').first()
+    if finance_user and not Asset.query.filter_by(assigned_to_id=finance_user.id).first():
+        spare = Asset.query.filter_by(assigned_to_id=None, status='active').first()
+        if spare:
+            spare.assigned_to_id = finance_user.id
+            spare.assigned_on = date.today()
+            db.session.commit()
 
 
 def _load_env(path):

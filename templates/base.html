@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-app-build="2026-07-08-staff-portal">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -81,7 +81,7 @@ tbody td{padding:10px 16px;vertical-align:middle}
 .alert-success{background:#dcfce7;color:#166534}.alert-error{background:#fee2e2;color:#991b1b}.alert-info{background:#dbeafe;color:#1e40af}.alert-warning{background:#fef9c3;color:#854d0e}
 /* Page title */
 .page-title{margin-bottom:20px;display:flex;align-items:flex-start;gap:12px}
-.page-title-text{flex:1}.page-title-text h2{font-size:18px;font-weight:600}.page-title-text p{font-size:13px;color:var(--text-muted);margin-top:2px}
+.page-title-text{flex:1}.page-title-text p{font-size:13px;color:var(--text-muted);margin:0}
 /* Search bar */
 .search-bar{display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap}
 .search-wrap{position:relative;flex:1;max-width:320px}
@@ -124,26 +124,89 @@ tbody td{padding:10px 16px;vertical-align:middle}
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
         Dashboard
       </a>
-      <a href="{{ url_for('assets.index') }}" class="nav-item {% if 'assets.' in (request.endpoint or '') and request.endpoint not in ['assets.assign','assets.assign_user','assets.new','assets.print_user_form'] %}active{% endif %}">
+      <a href="{{ url_for('assets.index') }}" class="nav-item {% if request.endpoint in ('assets.index', 'assets.detail') %}active{% endif %}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-4 0v2"/><path d="M8 7V5a2 2 0 0 0-4 0v2"/></svg>
-        {% if current_user.role == 'user' %}My Assets{% else %}All Assets{% endif %}
+        {% if is_staff_portal %}My Assets{% else %}All Assets{% endif %}
       </a>
-      <a href="{{ url_for('requests.asset_requests') }}" class="nav-item {% if 'requests.asset_requests' in (request.endpoint or '') or request.endpoint == 'requests.new_asset_request' %}active{% endif %}">
+
+      {% if is_staff_portal %}
+      <div class="nav-section">My Requests</div>
+      <a href="{{ url_for('requests.new_asset_request') }}" class="nav-item {% if request.endpoint == 'requests.new_asset_request' %}active{% endif %}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Request Asset
+      </a>
+      <a href="{{ url_for('requests.request_status') }}" class="nav-item {% if request.endpoint == 'requests.request_status' %}active{% endif %}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        View Request Status
+      </a>
+      <a href="{{ url_for('requests.asset_requests') }}" class="nav-item {% if request.endpoint == 'requests.asset_requests' and not request.args.get('review') %}active{% endif %}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5.586a1 1 0 0 1 .707.293l5.414 5.414a1 1 0 0 1 .293.707V19a2 2 0 0 1-2 2z"/></svg>
+        My Asset Requests
+      </a>
+      <a href="{{ url_for('requests.return_asset_picker') }}" class="nav-item {% if request.endpoint in ('requests.return_asset_picker', 'requests.new_return_request') %}active{% endif %}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4"/></svg>
+        Return Asset
+      </a>
+      <a href="{{ url_for('requests.new_repair_request') }}" class="nav-item {% if request.endpoint == 'requests.new_repair_request' %}active{% endif %}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+        Request Repair
+      </a>
+      
+      <a href="{{ url_for('requests.new_damage_report') }}" class="nav-item {% if request.endpoint == 'requests.new_damage_report' %}active{% endif %}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        Report Damage
+      </a>
+      <a href="{{ url_for('requests.request_history') }}" class="nav-item {% if request.endpoint == 'requests.request_history' %}active{% endif %}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        Request History
+      </a>
+      <a href="{{ url_for('requests.repair_requests') }}" class="nav-item {% if request.endpoint == 'requests.repair_requests' and not request.args.get('review') %}active{% endif %}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+        My Repair Requests
+      </a>
+      {% if current_user.role != 'user' %}
+      <a href="{{ url_for('requests.damage_reports') }}" class="nav-item {% if request.endpoint == 'requests.damage_reports' and not request.args.get('review') %}active{% endif %}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
+        My Damage Reports
+      </a>
+      {% endif %}
+      {% endif %}
+
+      {% if current_user.role in ('admin', 'finance') %}
+      <div class="nav-section">ICT Review</div>
+      <a href="{% if current_user.role == 'finance' %}{{ url_for('requests.asset_requests', review=1) }}{% else %}{{ url_for('requests.asset_requests') }}{% endif %}" class="nav-item {% if 'requests.asset_requests' in (request.endpoint or '') and (current_user.role == 'admin' or request.args.get('review')) %}active{% endif %}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5.586a1 1 0 0 1 .707.293l5.414 5.414a1 1 0 0 1 .293.707V19a2 2 0 0 1-2 2z"/></svg>
         Asset Requests
-        {% if current_user.role in ('admin','finance') %}
-          {% set pr = pending_asset_requests %}
-          {% if pr > 0 %}<span style="background:var(--accent);color:#fff;font-size:10px;padding:1px 6px;border-radius:10px;margin-left:auto">{{ pr }}</span>{% endif %}
-        {% endif %}
+        {% set pr = pending_asset_requests %}
+        {% if pr > 0 %}<span style="background:var(--accent);color:#fff;font-size:10px;padding:1px 6px;border-radius:10px;margin-left:auto">{{ pr }}</span>{% endif %}
       </a>
-      <a href="{{ url_for('requests.return_requests') }}" class="nav-item {% if 'requests.return_requests' in (request.endpoint or '') or request.endpoint == 'requests.new_return_request' %}active{% endif %}">
+      <a href="{% if current_user.role == 'finance' %}{{ url_for('requests.return_requests', review=1) }}{% else %}{{ url_for('requests.return_requests') }}{% endif %}" class="nav-item {% if 'requests.return_requests' in (request.endpoint or '') and (current_user.role == 'admin' or request.args.get('review')) %}active{% endif %}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4"/></svg>
         Return Requests
-        {% if current_user.role in ('admin','finance') %}
-          {% set rr = pending_return_requests %}
-          {% if rr > 0 %}<span style="background:var(--accent);color:#fff;font-size:10px;padding:1px 6px;border-radius:10px;margin-left:auto">{{ rr }}</span>{% endif %}
-        {% endif %}
+        {% set rr = pending_return_requests %}
+        {% if rr > 0 %}<span style="background:var(--accent);color:#fff;font-size:10px;padding:1px 6px;border-radius:10px;margin-left:auto">{{ rr }}</span>{% endif %}
       </a>
+      <a href="{% if current_user.role == 'finance' %}{{ url_for('requests.repair_requests', review=1) }}{% else %}{{ url_for('requests.repair_requests') }}{% endif %}" class="nav-item {% if request.endpoint == 'requests.repair_requests' and (current_user.role == 'admin' or request.args.get('review')) %}active{% endif %}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+        Repair Requests
+        {% set rpr = pending_repair_requests %}
+        {% if rpr > 0 %}<span style="background:var(--accent);color:#fff;font-size:10px;padding:1px 6px;border-radius:10px;margin-left:auto">{{ rpr }}</span>{% endif %}
+      </a>
+      <a href="{% if current_user.role == 'finance' %}{{ url_for('requests.damage_reports', review=1) }}{% else %}{{ url_for('requests.damage_reports') }}{% endif %}" class="nav-item {% if 'requests.damage' in (request.endpoint or '') and (current_user.role == 'admin' or request.args.get('review')) %}active{% endif %}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
+        Damage Reports
+        {% set pdr = pending_damage_reports %}
+        {% if pdr > 0 %}<span style="background:var(--accent);color:#fff;font-size:10px;padding:1px 6px;border-radius:10px;margin-left:auto">{{ pdr }}</span>{% endif %}
+      </a>
+      {% endif %}
+
+      {% if is_staff_portal %}
+      <div class="nav-section">Account</div>
+      <a href="{{ url_for('main.profile') }}" class="nav-item {% if request.endpoint == 'main.profile' %}active{% endif %}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        My Profile
+      </a>
+      {% endif %}
 
       {% if current_user.role == 'admin' %}
       <div class="nav-section">Manage Assets</div>
@@ -198,11 +261,13 @@ tbody td{padding:10px 16px;vertical-align:middle}
       {% endif %}
     </nav>
     <div style="border-top:1px solid rgba(255,255,255,.1);padding:6px 0">
+      {% if not is_staff_portal %}
       <a href="{{ url_for('main.profile') }}"
          class="nav-item {% if request.endpoint == 'main.profile' %}active{% endif %}" style="opacity:1">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
         My Profile
       </a>
+      {% endif %}
       <a href="{{ url_for('main.change_password') }}"
          class="nav-item {% if request.endpoint == 'main.change_password' %}active{% endif %}" style="opacity:1">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
@@ -238,6 +303,30 @@ tbody td{padding:10px 16px;vertical-align:middle}
       {% block content %}{% endblock %}
     </div>
   </div>
+  <footer style="padding:16px 28px; background:var(--surface2); border-top:1px solid var(--border); font-size:12px; color:var(--text-muted);">
+    <div style="display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between; align-items:center;">
+      <span>GR Asset Management System</span>
+      <a href="{{ privacy_policy_url }}" style="color:var(--primary);text-decoration:none;">Privacy Policy</a>
+    </div>
+  </footer>
 </div>
+<script>
+window.addEventListener('DOMContentLoaded', function() {
+  function getCookie(name) {
+    var match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+    return match ? decodeURIComponent(match[2]) : null;
+  }
+  var token = getCookie('csrf_token');
+  if (!token) return;
+  document.querySelectorAll('form[method="POST"]').forEach(function(form) {
+    if (form.querySelector('input[name="csrf_token"]')) return;
+    var input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'csrf_token';
+    input.value = token;
+    form.appendChild(input);
+  });
+});
+</script>
 </body>
 </html>

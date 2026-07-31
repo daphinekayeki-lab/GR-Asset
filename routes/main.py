@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, redirect, url_for, flash, request
 from flask_login import login_required, current_user
-from models import Asset, User, Project, ReturnRecord, ReturnRequest, AssetCategory
+from models import Asset, User, Project, ReturnRecord, ReturnRequest, AssetCategory, AssetRequest, RepairRequest, DamageReport
 from extensions import db
 from sqlalchemy import func
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -12,7 +12,7 @@ main_bp = Blueprint('main', __name__)
 @main_bp.route('/dashboard')
 @login_required
 def dashboard():
-    if current_user.role == 'user':
+    if current_user.is_staff_portal:
         my_assets = Asset.query.filter_by(
             assigned_to_id=current_user.id, status='active'
         ).all()
@@ -24,11 +24,21 @@ def dashboard():
             requested_by_id=current_user.id, status='pending'
         ).all()
         pending_returns = {r.asset_id: r for r in pending_rets}
+        my_asset_reqs = AssetRequest.query.filter_by(requested_by_id=current_user.id).all()
+        my_repair_reqs = RepairRequest.query.filter_by(requested_by_id=current_user.id).all()
+        pending_asset = len([r for r in my_asset_reqs if r.status == 'pending'])
+        approved_asset = len([r for r in my_asset_reqs if r.status == 'approved'])
+        pending_repair = len([r for r in my_repair_reqs if r.status == 'pending'])
+        returned_count = len(my_returns)
         return render_template('dashboard_user.html',
                                my_assets=my_assets,
                                my_returns=my_returns,
                                total_value=total_value,
-                               pending_returns=pending_returns)
+                               pending_returns=pending_returns,
+                               pending_asset=pending_asset,
+                               approved_asset=approved_asset,
+                               pending_repair=pending_repair,
+                               returned_count=returned_count)
 
     # Admin / Finance dashboard
     total_assets    = Asset.query.filter_by(status='active').count()
@@ -116,6 +126,11 @@ def profile():
 # ─────────────────────────────────────────────
 #  CHANGE PASSWORD
 # ─────────────────────────────────────────────
+@main_bp.route('/privacy-policy')
+def privacy_policy():
+    return render_template('privacy_policy.html')
+
+
 @main_bp.route('/change-password', methods=['GET', 'POST'])
 @login_required
 def change_password():
