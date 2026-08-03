@@ -100,7 +100,7 @@ You will see:
   ─────────────────────────────
   Running at: http://127.0.0.1:5000
   Network:    http://0.0.0.0:5000
-  Accounts:   admin/admin123  finance/finance123  john/user123
+  Accounts:   admin/admin123  user/user123  finance/finance123  john/user123
 ```
 
 ---
@@ -129,8 +129,9 @@ http://127.0.0.1:5000
 | Username | Password | Role |
 |----------|----------|------|
 | admin | admin123 | Administrator — full access |
-| finance | finance123 | Finance Officer — view + reports |
-| john | user123 | Staff User — own assets only |
+| user | user123 | Staff User — own assets and requests |
+| john | user123 | Staff User — own assets and requests |
+| finance | finance123 | Finance Officer — staff portal + ICT review + reports |
 | mary | user123 | Staff User — own assets only |
 
 **Change all passwords after first login** via Admin → Register Users → Edit.

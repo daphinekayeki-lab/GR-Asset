@@ -5,10 +5,9 @@
 
 <div class="page-title">
   <div class="page-title-text">
-    <h2>Asset Requests</h2>
-    <p>{% if current_user.role == 'user' %}Your requests for assets.{% else %}All staff asset requests — pending requests require your review.{% endif %}</p>
+    <p>{% if current_user.is_staff_portal and not review_mode %}Your requests for assets.{% else %}All staff asset requests — pending requests require your review.{% endif %}</p>
   </div>
-  {% if current_user.role == 'user' %}
+  {% if current_user.is_staff_portal and not review_mode %}
   <a href="{{ url_for('requests.new_asset_request') }}" class="btn btn-primary">+ New Request</a>
   {% endif %}
 </div>
@@ -22,20 +21,20 @@
 {% endif %}
 
 <div class="card">
-  <div class="card-header"><h2>{{ 'My Requests' if current_user.role == 'user' else 'All Requests' }}</h2><span class="text-muted text-sm">{{ requests|length }} total</span></div>
+  <div class="card-header"><h2>{{ 'My Requests' if current_user.is_staff_portal and not review_mode else 'All Requests' }}</h2><span class="text-muted text-sm">{{ requests|length }} total</span></div>
   <div class="card-body">
     {% if requests %}
     <table>
       <thead>
         <tr>
-          {% if current_user.role != 'user' %}<th>Requested By</th>{% endif %}
+          {% if review_mode %}<th>Requested By</th>{% endif %}
           <th>Item Requested</th><th>Purpose</th><th>Duration</th><th>Dates Needed</th><th>Status</th><th>Requested On</th><th>Actions</th>
         </tr>
       </thead>
       <tbody>
         {% for r in requests %}
         <tr>
-          {% if current_user.role != 'user' %}
+          {% if review_mode %}
           <td>
             <div class="flex items-center gap-2">
               <div class="avatar" style="width:28px;height:28px;font-size:10px">{{ r.requested_by.initials }}</div>
@@ -90,7 +89,7 @@
     <div style="text-align:center;padding:60px 20px;color:var(--text-muted)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="48" height="48" style="margin:0 auto 16px;opacity:.3;display:block"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5.586a1 1 0 0 1 .707.293l5.414 5.414a1 1 0 0 1 .293.707V19a2 2 0 0 1-2 2z"/></svg>
       <p>No asset requests yet.</p>
-      {% if current_user.role == 'user' %}
+      {% if current_user.is_staff_portal and not review_mode %}
       <a href="{{ url_for('requests.new_asset_request') }}" class="btn btn-primary" style="margin-top:16px">Make a Request</a>
       {% endif %}
     </div>

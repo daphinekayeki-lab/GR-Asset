@@ -1,0 +1,67 @@
+{% extends 'base.html' %}
+{% block title %}Damage Reports — GR AMS{% endblock %}
+{% block page_title %}Damage Reports{% endblock %}
+{% block content %}
+<div class="page-title">
+  <div class="page-title-text"><p>Track reported damage, loss and maintenance requests.</p></div>
+  <div class="flex gap-2">
+    <a href="{{ url_for('requests.damage_reports_csv') }}" class="btn btn-outline">📄 CSV</a>
+    <a href="{{ url_for('requests.damage_reports_pdf') }}" class="btn btn-outline">📄 PDF</a>
+    {% if current_user.is_staff_portal and not review_mode|default(false) %}
+    <a href="{{ url_for('requests.new_damage_report') }}" class="btn btn-primary">+ Report Damage</a>
+    {% endif %}
+  </div>
+</div>
+<div class="card">
+  <div class="card-body">
+    {% if reports %}
+    <table>
+      <thead><tr>{% if review_mode|default(false) %}<th>Reported By</th>{% endif %}<th>Type</th><th>Asset</th><th>Priority</th><th>Status</th><th>Date</th><th>Actions</th></tr></thead>
+      <tbody>
+        {% for r in reports %}
+        <tr>
+          {% if review_mode|default(false) %}<td>{{ r.reported_by.name }}</td>{% endif %}
+          <td>{{ r.report_type|title }}</td>
+          <td>{% if r.asset %}<span class="asset-tag" style="font-size:11px">{{ r.asset.tag }}</span>{% else %}—{% endif %}</td>
+          <td>{{ r.priority|title }}</td>
+          <td><span class="badge badge-{{ 'good' if r.status == 'completed' else 'poor' if r.status in ('rejected','disposed','beyond_repair') else 'fair' }}">{{ r.status|replace('_',' ')|title }}</span></td>
+          <td class="text-muted text-sm">{{ r.reported_at.strftime('%d %b %Y') }}</td>
+          <td>
+            {% if review_mode|default(false) %}
+            <div style="display:flex;flex-direction:column;gap:8px;min-width:160px">
+              <form method="POST" action="{{ url_for('requests.review_damage_report', report_id=r.id) }}" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+                <select name="status" class="filter-sel" style="font-size:12px">
+                  <option value="repair_required">Repair Required</option>
+                  <option value="completed">Completed</option>
+                  <option value="beyond_repair">Beyond Repair</option>
+                  <option value="disposed">Disposed</option>
+                  <option value="rejected">Reject</option>
+                </select>
+                <input name="admin_note" placeholder="Note" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;width:120px">
+                <button type="submit" class="btn btn-sm btn-primary">Update</button>
+              </form>
+              <form method="POST" action="{{ url_for('requests.delete_damage_report', report_id=r.id) }}" style="display:inline" onsubmit="return confirm('Delete this damage report?')">
+                <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+              </form>
+            </div>
+            {% else %}
+            <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+              <span class="text-muted text-sm">{{ r.description[:50] }}{% if r.description|length > 50 %}…{% endif %}</span>
+              {% if r.reported_by_id == current_user.id and r.status == 'pending' %}
+              <form method="POST" action="{{ url_for('requests.delete_damage_report', report_id=r.id) }}" style="display:inline" onsubmit="return confirm('Delete this damage report?')">
+                <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+              </form>
+              {% endif %}
+            </div>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="text-muted" style="padding:40px;text-align:center">No damage reports yet.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

@@ -131,6 +131,39 @@ def privacy_policy():
     return render_template('privacy_policy.html')
 
 
+@main_bp.route('/force-password-change', methods=['GET', 'POST'])
+@login_required
+def force_password_change():
+    if not current_user.force_password_change:
+        return redirect(url_for('main.dashboard'))
+
+    if request.method == 'POST':
+        new_pw = request.form.get('new_password', '')
+        confirm_pw = request.form.get('confirm_password', '')
+
+        if len(new_pw) < 6:
+            flash('New password must be at least 6 characters.', 'error')
+            return redirect(url_for('main.force_password_change'))
+
+        if new_pw != confirm_pw:
+            flash('New passwords do not match.', 'error')
+            return redirect(url_for('main.force_password_change'))
+
+        if current_user.check_password(new_pw):
+            flash('New password must be different from your current password.', 'error')
+            return redirect(url_for('main.force_password_change'))
+
+        current_user.set_password(new_pw)
+        current_user.force_password_change = False
+        db.session.commit()
+        flash('✓ Password updated successfully. Please sign in with your new password.', 'success')
+        logout_user()
+        session.pop('session_token', None)
+        return redirect(url_for('auth.login'))
+
+    return render_template('force_password_change.html')
+
+
 @main_bp.route('/change-password', methods=['GET', 'POST'])
 @login_required
 def change_password():

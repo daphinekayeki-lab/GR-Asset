@@ -1,9 +1,9 @@
 {% extends 'base.html' %}
 {% block title %}Assets — GR AMS{% endblock %}
-{% block page_title %}{% if current_user.role == 'user' %}My Assets{% else %}All Assets{% endif %}{% endblock %}
+{% block page_title %}{% if current_user.is_staff_portal %}My Assets{% else %}All Assets{% endif %}{% endblock %}
 {% block content %}
 
-{% if current_user.role == 'user' %}
+{% if current_user.is_staff_portal %}
 <div class="alert alert-info no-print">Showing only assets assigned to you. Contact an administrator for full inventory access.</div>
 {% endif %}
 
@@ -13,7 +13,7 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
       <input name="q" value="{{ q }}" placeholder="Search tag, name, serial…">
     </div>
-    {% if current_user.role != 'user' %}
+    {% if not current_user.is_staff_portal %}
     <select name="project_id" class="filter-sel" onchange="this.form.submit()">
       <option value="">All Countries</option>
       {% for p in projects %}
@@ -34,7 +34,8 @@
   </form>
   <div class="flex gap-2">
     <a href="{{ url_for('assets.download_csv') }}" class="btn btn-outline">📄 Download CSV</a>
-    <a href="{{ url_for('assets.download_pdf') }}" class="btn btn-outline">📄 Download PDF</a>
+    <a href="{{ url_for('assets.download_pdf') }}?v=2" class="btn btn-outline">📄 Download PDF</a>
+    <a href="{{ url_for('assets.asset_qrcodes_pdf') }}" class="btn btn-outline">🔳 Download QR Codes PDF</a>
     {% if current_user.role == 'admin' %}
     <a href="{{ url_for('assets.new') }}" class="btn btn-primary">+ Register Asset</a>
     {% endif %}
@@ -42,7 +43,7 @@
 </div>
 
 <div class="card">
-  <div class="card-header"><h2>{% if current_user.role == 'user' %}My Assets{% else %}Asset Register{% endif %}</h2><span class="text-muted text-sm">{{ assets|length }} asset(s)</span></div>
+  <div class="card-header"><h2>{% if current_user.is_staff_portal %}My Assets{% else %}Asset Register{% endif %}</h2><span class="text-muted text-sm">{{ assets|length }} asset(s)</span></div>
   <div class="card-body">
     {% if assets %}
     <table>
@@ -51,10 +52,10 @@
           <th>Asset Tag</th>
           <th>Name / Category</th>
           <th>Country</th>
-          {% if current_user.role != 'user' %}<th>Vendor</th><th>Price</th>{% endif %}
+          {% if not current_user.is_staff_portal %}<th>Vendor</th><th>Price</th>{% endif %}
           <th>Date Purchased</th>
           <th>Condition</th>
-          {% if current_user.role != 'user' %}<th>Assigned To</th>{% endif %}
+          {% if not current_user.is_staff_portal %}<th>Assigned To</th>{% endif %}
           <th>Actions</th>
         </tr>
       </thead>
@@ -62,23 +63,26 @@
         {% for a in assets %}
         <tr>
           <td><span class="asset-tag">{{ a.tag }}</span></td>
-          <td><strong>{{ a.name }}</strong><br><span class="text-muted text-sm">{{ a.category.name }}{% if a.serial_number %} · {{ a.serial_number }}{% endif %}</span></td>
-          <td>{{ a.project.name }}</td>
-          {% if current_user.role != 'user' %}
+          <td><strong>{{ a.name }}</strong><br><span class="text-muted text-sm">{{ a.category.name if a.category else '—' }}{% if a.serial_number %} · {{ a.serial_number }}{% endif %}</span></td>
+          <td>{{ a.project.name if a.project else '—' }}</td>
+          {% if not current_user.is_staff_portal %}
           <td>{{ a.vendor.name if a.vendor else '—' }}</td>
           <td class="font-mono text-sm">{{ a.price|currency }}</td>
           {% endif %}
           <td class="text-muted text-sm">{{ a.date_purchased|dateformat }}</td>
           <td><span class="badge badge-{{ a.condition }}">{{ a.condition|title }}</span></td>
-          {% if current_user.role != 'user' %}
+          {% if not current_user.is_staff_portal %}
           <td>{{ a.assigned_user.name if a.assigned_user else '<span class="text-muted">—</span>'|safe }}</td>
           {% endif %}
           <td>
             <div class="flex gap-2">
-              {% if current_user.role == 'user' %}
-              <a href="{{ url_for('assets.print_user_form', user_id=current_user.id) }}" class="btn btn-sm btn-outline">🖨</a>
+              {% if current_user.is_staff_portal %}
+              <a href="{{ url_for('assets.detail', asset_id=a.id) }}" class="btn btn-sm btn-outline">Details</a>
+              <a href="{{ url_for('assets.asset_receipt_pdf', asset_id=a.id) }}" class="btn btn-sm btn-outline">📄 Receipt</a>
+              <a href="{{ url_for('assets.asset_qrcode_pdf', asset_id=a.id) }}" class="btn btn-sm btn-outline">🔳 QR Code</a>
               <a href="{{ url_for('requests.new_return_request', asset_id=a.id) }}" class="btn btn-sm btn-warn">↩ Return</a>
               {% else %}
+              <a href="{{ url_for('assets.asset_qrcode_pdf', asset_id=a.id) }}" class="btn btn-sm btn-outline">🔳 QR Code</a>
               <a href="{{ url_for('assets.print_user_form', user_id=a.assigned_to_id) if a.assigned_to_id else '#' }}" class="btn btn-sm btn-outline" {% if not a.assigned_to_id %}style="opacity:.4;pointer-events:none"{% endif %}>🖨</a>
               <a href="{{ url_for('assets.edit', asset_id=a.id) }}" class="btn btn-sm btn-outline">Edit</a>
               <form method="POST" action="{{ url_for('assets.delete', asset_id=a.id) }}" style="display:inline" onsubmit="return confirm('Delete this asset?')">

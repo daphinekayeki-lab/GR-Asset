@@ -2,8 +2,7 @@
 {% block title %}{{ title }} — GR AMS{% endblock %}
 {% block page_title %}{{ title }}{% endblock %}
 {% block content %}
-<div class="page-title">
-  <div class="page-title-text"><h2>{{ title }}</h2></div>
+<div class="page-title" style="justify-content:flex-end">
   <a href="{{ url_for('users.index') }}" class="btn btn-outline">← Back to Users</a>
 </div>
 
@@ -31,6 +30,16 @@
         <div class="form-group">
           <label>Department</label>
           <input name="department" value="{{ user.department if user else '' }}" placeholder="e.g. Programs">
+        </div>
+
+        <div class="form-group">
+          <label>Country</label>
+          <select name="project_id">
+            <option value="">Select country</option>
+            {% for c in countries %}
+            <option value="{{ c.id }}" {% if user and user.project_id == c.id %}selected{% endif %}>{{ c.name }} ({{ c.code }})</option>
+            {% endfor %}
+          </select>
         </div>
 
         <div style="grid-column:1/-1;margin-top:12px;padding:18px 20px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius)">

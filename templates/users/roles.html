@@ -3,7 +3,7 @@
 {% block page_title %}{{ title }}{% endblock %}
 {% block content %}
 <div class="page-title">
-  <div class="page-title-text"><h2>Manage Roles</h2><p>Create, edit or remove system roles for user access.</p></div>
+  <div class="page-title-text"><p>Create, edit or remove system roles for user access.</p></div>
   <div style="display:flex;gap:10px;align-items:center">
     <button onclick="document.getElementById('add-role-modal').style.display='flex'" class="btn btn-primary">+ Add Role</button>
     <a href="{{ url_for('users.index') }}" class="btn btn-outline">← Back to Users</a>

@@ -3,10 +3,10 @@
 {% block page_title %}Asset Reports{% endblock %}
 {% block content %}
 <div class="page-title">
-  <div class="page-title-text"><h2>Asset Reports</h2><p>Full asset register and return log.</p></div>
+  <div class="page-title-text"><p>Full asset register and return log.</p></div>
   <div class="no-print" style="display:flex;gap:10px;flex-wrap:wrap">
     <a href="{{ url_for('reports.download_csv') }}" class="btn btn-outline">📄 Download CSV</a>
-    <a href="{{ url_for('reports.download_pdf') }}" class="btn btn-outline">📄 Download PDF</a>
+    <a href="{{ url_for('reports.download_pdf') }}?v=2" class="btn btn-outline">📄 Download PDF</a>
     <button onclick="window.print()" class="btn btn-accent">🖨 Print Report</button>
   </div>
 </div>
@@ -26,7 +26,7 @@
         <tr>
           <td>{{ loop.index }}</td>
           <td><span class="asset-tag" style="font-size:11px">{{ a.tag }}</span></td>
-          <td>{{ a.category.name }}</td>
+          <td>{{ a.category.name if a.category else '—' }}</td>
           <td>{{ a.name }}</td>
           <td>{{ a.processor or '—' }}</td>
           <td>{{ a.serial_number or '—' }}</td>

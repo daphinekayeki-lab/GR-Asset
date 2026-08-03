@@ -18,6 +18,7 @@ class User(UserMixin, db.Model):
     project_id    = db.Column(db.Integer, db.ForeignKey('projects.id'))
     role          = db.Column(db.String(20),  nullable=False, default='user')
     status        = db.Column(db.String(20),  nullable=False, default='active')
+    force_password_change = db.Column(db.Boolean, nullable=False, default=False)
     created_at    = db.Column(db.DateTime,    default=datetime.utcnow)
     assigned_assets = db.relationship('Asset', foreign_keys='Asset.assigned_to_id',
                                       backref='assigned_user', lazy='dynamic')

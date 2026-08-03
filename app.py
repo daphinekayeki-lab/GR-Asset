@@ -156,6 +156,8 @@ def create_app():
             alter_stmts.append("ALTER TABLE users ADD COLUMN last_login_at DATETIME")
         if 'last_login_ip' not in user_cols:
             alter_stmts.append("ALTER TABLE users ADD COLUMN last_login_ip TEXT")
+        if 'force_password_change' not in user_cols:
+            alter_stmts.append("ALTER TABLE users ADD COLUMN force_password_change BOOLEAN DEFAULT 0")
         try:
             ar_cols = [r['name'] for r in db.session.execute(text("PRAGMA table_info('asset_requests')")).mappings()]
         except Exception:

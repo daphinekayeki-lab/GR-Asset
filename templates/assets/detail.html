@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+{% block title %}{{ asset.tag }} — GR AMS{% endblock %}
+{% block page_title %}{{ asset.name }}{% endblock %}
+{% block content %}
+<div class="page-title">
+  <div class="page-title-text"><p><span class="asset-tag">{{ asset.tag }}</span></p></div>
+  <div class="flex gap-2">
+    <a href="{{ url_for('assets.index') }}" class="btn btn-outline">← Back</a>
+    <a href="{{ url_for('assets.asset_receipt_pdf', asset_id=asset.id) }}" class="btn btn-outline">📄 Download Receipt</a>
+    <a href="{{ url_for('assets.asset_qrcode_pdf', asset_id=asset.id) }}" class="btn btn-outline">🔳 QR Code</a>
+    {% if current_user.is_staff_portal %}
+    <a href="{{ url_for('requests.new_return_request', asset_id=asset.id) }}" class="btn btn-warn">↩ Return</a>
+    {% endif %}
+  </div>
+</div>
+<div class="card" style="max-width:800px">
+  <div class="card-body">
+    <div class="form-grid form-grid-2" style="padding:20px">
+      <div class="form-group"><label>Category</label><div>{{ asset.category.name if asset.category else '—' }}</div></div>
+      <div class="form-group"><label>Country</label><div>{{ asset.project.name if asset.project else '—' }}</div></div>
+      <div class="form-group"><label>Serial Number</label><div>{{ asset.serial_number or '—' }}</div></div>
+      <div class="form-group"><label>Processor</label><div>{{ asset.processor or '—' }}</div></div>
+      <div class="form-group"><label>Condition</label><div><span class="badge badge-{{ asset.condition }}">{{ asset.condition|title }}</span></div></div>
+      <div class="form-group"><label>Location</label><div>{{ asset.location or '—' }}</div></div>
+      <div class="form-group"><label>Date Purchased</label><div>{{ asset.date_purchased|dateformat }}</div></div>
+      <div class="form-group"><label>Assigned On</label><div>{{ asset.assigned_on|dateformat }}</div></div>
+      <div class="form-group"><label>Value</label><div>{{ asset.price|currency }}</div></div>
+      <div class="form-group"><label>Vendor</label><div>{{ asset.vendor.name if asset.vendor else '—' }}</div></div>
+      {% if asset.description %}
+      <div class="form-group" style="grid-column:1/-1"><label>Description</label><div>{{ asset.description }}</div></div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

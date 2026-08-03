@@ -1,0 +1,44 @@
+{% extends 'base.html' %}
+{% block title %}Report Damage — GR AMS{% endblock %}
+{% block page_title %}Report Damage{% endblock %}
+{% block content %}
+<div class="page-title">
+  <div class="page-title-text"><p>Report a damaged, lost asset or request maintenance.</p></div>
+  <a href="{{ url_for('requests.damage_reports') }}" class="btn btn-outline">← My Reports</a>
+</div>
+<form method="POST" style="max-width:700px">
+  <div class="card">
+    <div class="card-header"><h2>Damage Report</h2></div>
+    <div style="padding:24px">
+      <div class="form-grid form-grid-2">
+        <div class="form-group">
+          <label>Report Type *</label>
+          <select name="report_type" required>
+            {% for val, label in report_types %}<option value="{{ val }}">{{ label }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Priority *</label>
+          <select name="priority" required>
+            {% for val, label in priorities %}<option value="{{ val }}" {% if val == 'medium' %}selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="form-group" style="grid-column:1/-1">
+          <label>Asset {% if assets %}*{% else %}(optional for lost items){% endif %}</label>
+          <select name="asset_id" {% if assets %}required{% endif %}>
+            <option value="">— No specific asset / Lost —</option>
+            {% for a in assets %}<option value="{{ a.id }}">{{ a.tag }} — {{ a.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="form-group" style="grid-column:1/-1">
+          <label>Description *</label>
+          <textarea name="description" required placeholder="Describe the damage, loss or maintenance needed…" style="min-height:100px"></textarea>
+        </div>
+      </div>
+    </div>
+    <div style="padding:16px 24px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:10px">
+      <button type="submit" class="btn btn-primary">Submit Report</button>
+    </div>
+  </div>
+</form>
+{% endblock %}

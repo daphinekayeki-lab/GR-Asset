@@ -50,6 +50,9 @@ def login():
             session['session_token'] = user.session_token
             login_user(user, remember=True, fresh=True)
             _audit_log('login_success', user_id=user.id, details='User logged in successfully.')
+            if user.force_password_change:
+                flash('Please set a new password to continue.', 'info')
+                return redirect(url_for('main.force_password_change'))
             next_page = request.args.get('next')
             if next_page and urlparse(next_page).netloc == '':
                 return redirect(next_page)
@@ -97,6 +100,7 @@ def reset_password():
         else:
             temp_password = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(10))
             user.set_password(temp_password)
+            user.force_password_change = True
             db.session.commit()
             ok, err = send_password_reset_email(
                 to_email=user.email,

@@ -1,9 +1,9 @@
 {% extends 'base.html' %}
 {% block title %}Users — GR AMS{% endblock %}
-{% block page_title %}Register Users{% endblock %}
+{% block page_title %}User Accounts{% endblock %}
 {% block content %}
 <div class="page-title">
-  <div class="page-title-text"><h2>User Accounts</h2><p>Manage system users and access levels.</p></div>
+  <div class="page-title-text"><p>Manage system users and access levels.</p></div>
   <div style="display:flex;gap:10px;align-items:center">
     <a href="{{ url_for('users.roles') }}" class="btn btn-primary">Roles</a>
     <a href="{{ url_for('users.new') }}" class="btn btn-primary">+ Register User</a>
@@ -30,19 +30,7 @@
 <div class="card" style="margin-top:20px">
   <div class="card-header"><h2>Upload Users from Excel</h2></div>
   <div class="card-body">
-    <p>Upload an Excel file with a header row containing the columns below.</p>
-    <div style="overflow-x:auto;margin-bottom:16px">
-      <table>
-        <thead><tr><th>Column</th><th>Required</th><th>Notes</th></tr></thead>
-        <tbody>
-          <tr><td class="font-mono">NAME</td><td>Yes</td><td>Full user name.</td></tr>
-          <tr><td class="font-mono">USERNAME</td><td>Yes</td><td>Login username; must be unique.</td></tr>
-          <tr><td class="font-mono">EMAIL</td><td>No</td><td>User email address.</td></tr>
-          <tr><td class="font-mono">DEPARTMENT</td><td>No</td><td>Optional department or team.</td></tr>
-          <tr><td class="font-mono">ROLE</td><td>No</td><td>Role key or label (e.g. admin, finance, user). Defaults to user.</td></tr>
-        </tbody>
-      </table>
-    </div>
+    <p>Upload an Excel file (.xlsx) using the sample template format.</p>
     <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:18px">
       <a href="{{ url_for('users.import_template') }}" class="btn btn-outline">Download Sample Template</a>
       <div style="font-size:12px;color:var(--text-muted);flex:1;min-width:240px">
@@ -61,7 +49,7 @@
 <div class="card">
   <div class="card-body">
     <table>
-      <thead><tr><th>Name</th><th>Username</th><th>Email</th><th>Department</th><th>Role</th><th>Status</th><th>Joined</th><th>Actions</th></tr></thead>
+      <thead><tr><th>Name</th><th>Username</th><th>Email</th><th>Department</th><th>Country</th><th>Role</th><th>Status</th><th>Joined</th><th>Actions</th></tr></thead>
       <tbody>
         {% for u in users %}
         <tr>
@@ -69,6 +57,7 @@
           <td class="font-mono text-sm">{{ u.username }}</td>
           <td class="text-muted">{{ u.email or '—' }}</td>
           <td>{{ u.department or '—' }}</td>
+          <td>{{ u.project.name if u.project else '—' }}</td>
           <td><span class="badge badge-{{ u.role }}">{{ u.role_label }}</span></td>
           <td><span class="badge badge-{{ u.status }}">{{ u.status|title }}</span></td>
           <td class="text-muted text-sm">{{ u.created_at|dateformat }}</td>
